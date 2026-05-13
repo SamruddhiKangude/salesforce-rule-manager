@@ -1,0 +1,12 @@
+{
+  "name": "salesforce-rule-manager-assessment",
+  "version": "1.0.0",
+  "description": "Salesforce Validation Rule Manager",
+  "scripts": {
+    "start": "node backend/server.js",
+    "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix backend"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
