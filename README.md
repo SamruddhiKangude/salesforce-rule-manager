@@ -88,13 +88,41 @@ Ensure you have created 4-5 simple Validation Rules on the **Account** object in
 6. Click **Deploy Changes** to push the modifications back to Salesforce via the Tooling API.
 7. Verify the changes directly in your Salesforce Org.
 
-## Deployment Notes
+## Local Setup & Installation
 
-To deploy this application to online servers (like Render, Heroku, or AWS Amplify):
-1. **Frontend**: Build the React app (`npm run build`) and deploy the `dist` folder. Make sure to set the `VITE_API_BASE` environment variable to your deployed backend URL.
-2. **Backend**: Deploy the Express server. Update the `SALESFORCE_CALLBACK_URL` and `FRONTEND_URL` environment variables.
-3. **Salesforce**: Update your Connected App's **Callback URL** in Salesforce to match your deployed backend's callback URL.
+You can run both the frontend and backend simultaneously from the root directory:
+
+1. **Install all dependencies**:
+   ```bash
+   npm run build
+   ```
+2. **Setup Environment Variables**:
+   Create a `.env` file in the root directory (use `.env.example` as a template).
+3. **Run in Development Mode**:
+   ```bash
+   npm run dev
+   ```
+
+Alternatively, you can navigate into `frontend/` and `backend/` directories to run them individually as described in their respective folders.
+
+## Vercel Deployment
+
+This project is optimized for deployment on **Vercel** as a monorepo.
+
+### 1. Configure Salesforce
+Update your **Connected App**'s Callback URL in Salesforce to:
+`https://your-app-name.vercel.app/api/auth/callback`
+
+### 2. Deploy to Vercel
+1. Push your code to a GitHub repository.
+2. Import the project into Vercel.
+3. Add the following **Environment Variables** in the Vercel dashboard:
+   - `SALESFORCE_CLIENT_ID`: Your Consumer Key.
+   - `SALESFORCE_CLIENT_SECRET`: Your Consumer Secret.
+   - `SALESFORCE_CALLBACK_URL`: `https://your-app-name.vercel.app/api/auth/callback`
+   - `FRONTEND_URL`: `https://your-app-name.vercel.app`
+4. Vercel will automatically use the `vercel.json` and the root `package.json` to build and serve your application.
 
 ## Tech Stack
 - **Frontend**: React.js, Vite, Axios, Lucide React, Vanilla CSS
-- **Backend**: Node.js, Express.js, JSforce (Salesforce API Library), dotenv
+- **Backend**: Node.js, Express.js (deployed as Vercel Serverless Functions), JSforce, dotenv
