@@ -16,6 +16,7 @@ function App() {
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState('Validation Rules');
   const [environment, setEnvironment] = useState('Production');
+  const [customDomain, setCustomDomain] = useState('');
   const [showInfo, setShowInfo] = useState(true);
 
   const tabs = ['Validation Rules', 'Workflows', 'Process Flows', 'Triggers'];
@@ -65,9 +66,10 @@ function App() {
 
   const handleLogin = () => {
     setLoading(true);
+    const envParam = environment === 'Custom' ? (customDomain.startsWith('http') ? customDomain : `https://${customDomain}`) : environment;
     // Give time to see the "Accessing Salesforce" screen before redirecting
     setTimeout(() => {
-      window.location.href = `${API_BASE}/auth/login?env=${environment}`;
+      window.location.href = `${API_BASE}/auth/login?env=${encodeURIComponent(envParam)}`;
     }, 1500);
   };
 
@@ -157,7 +159,20 @@ function App() {
               >
                 <option value="Production">Production</option>
                 <option value="Sandbox">Sandbox</option>
+                <option value="Custom">Custom Domain</option>
               </select>
+              
+              {environment === 'Custom' && (
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  style={{ marginLeft: '10px', width: '200px' }}
+                  placeholder="e.g. my-company.my.salesforce.com" 
+                  value={customDomain}
+                  onChange={(e) => setCustomDomain(e.target.value)}
+                />
+              )}
+              
               <button className="btn-login" onClick={handleLogin}>LOGIN</button>
             </div>
           </div>
