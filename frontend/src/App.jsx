@@ -89,7 +89,7 @@ function App() {
 
   const fetchRules = async (explicitCreds = null) => {
     setFetching(true);
-    
+
     const activeCreds = explicitCreds || credentials;
     if (!activeCreds) {
       console.error('No credentials available to fetch rules');
@@ -149,11 +149,11 @@ function App() {
             <p className="description">
               None of your organisation information or data is captured or kept from running this tool.
             </p>
-            
+
             <div className="login-row">
               <span className="label">Environment</span>
-              <select 
-                className="select-box" 
+              <select
+                className="select-box"
                 value={environment}
                 onChange={(e) => setEnvironment(e.target.value)}
               >
@@ -161,18 +161,18 @@ function App() {
                 <option value="Sandbox">Sandbox</option>
                 <option value="Custom">Custom Domain</option>
               </select>
-              
+
               {environment === 'Custom' && (
-                <input 
-                  type="text" 
-                  className="input-field" 
+                <input
+                  type="text"
+                  className="input-field"
                   style={{ marginLeft: '10px', width: '200px' }}
-                  placeholder="e.g. my-company.my.salesforce.com" 
+                  placeholder="e.g. my-company.my.salesforce.com"
                   value={customDomain}
                   onChange={(e) => setCustomDomain(e.target.value)}
                 />
               )}
-              
+
               <button className="btn-login" onClick={handleLogin}>LOGIN</button>
             </div>
           </div>
@@ -240,7 +240,7 @@ function App() {
             </p>
 
             <div className="logged-in-header">
-               <h2 className="section-subtitle">Logged in as:</h2>
+              <h2 className="section-subtitle">Logged in as:</h2>
             </div>
 
             <div className="loading-state">
@@ -256,7 +256,7 @@ function App() {
         <div className="dashboard-layout">
           <div className="dashboard-content">
             <h1 className="main-title">Salesforce Switch</h1>
-            
+
             {showInfo && (
               <div className="info-alert">
                 <div className="info-content">
@@ -274,8 +274,8 @@ function App() {
             <div className="tabs-container">
               <div className="tabs-header">
                 {tabs.map(tab => (
-                  <div 
-                    key={tab} 
+                  <div
+                    key={tab}
                     className={`tab-item ${activeTab === tab ? 'active' : ''}`}
                     onClick={() => setActiveTab(tab)}
                   >
@@ -285,10 +285,10 @@ function App() {
               </div>
 
               <div className="tab-actions">
-                 <button className="btn-rollback" onClick={fetchRules}>ROLLBACK TO ORIGINAL</button>
-                 <button className="btn-deploy" onClick={deployChanges} disabled={deploying}>
-                   {deploying ? 'DEPLOYING...' : 'DEPLOY CHANGES'}
-                 </button>
+                <button className="btn-rollback" onClick={fetchRules}>ROLLBACK TO ORIGINAL</button>
+                <button className="btn-deploy" onClick={deployChanges} disabled={deploying}>
+                  {deploying ? 'DEPLOYING...' : 'DEPLOY CHANGES'}
+                </button>
               </div>
 
               <div className="object-header">
@@ -303,7 +303,7 @@ function App() {
                 {rules.map(rule => (
                   <div className="rule-row" key={rule.Id}>
                     <span className="rule-name">{rule.ValidationName}</span>
-                    <div 
+                    <div
                       className={`toggle-switch ${rule.Active ? 'on' : 'off'}`}
                       onClick={() => !deploying && toggleRule(rule.Id)}
                     >
