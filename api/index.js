@@ -27,7 +27,13 @@ app.use(express.json());
 
 // Helper to create OAuth2 object dynamically based on environment
 const getOAuth2 = (env = 'Production') => {
-  const loginUrl = env === 'Sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+  let loginUrl;
+  if (env.startsWith('http')) {
+    loginUrl = env;
+  } else {
+    loginUrl = env === 'Sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+  }
+  
   return new jsforce.OAuth2({
     clientId: process.env.SALESFORCE_CLIENT_ID,
     clientSecret: process.env.SALESFORCE_CLIENT_SECRET,
@@ -39,10 +45,10 @@ const getOAuth2 = (env = 'Production') => {
 app.get('/api/auth/login', (req, res) => {
   const env = req.query.env || 'Production';
   const oauth2 = getOAuth2(env);
-  
-  res.redirect(oauth2.getAuthorizationUrl({ 
+
+  res.redirect(oauth2.getAuthorizationUrl({
     prompt: 'login',
-    state: env 
+    state: env
   }));
 });
 
