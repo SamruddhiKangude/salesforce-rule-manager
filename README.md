@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **Instruction for User:**
-> To test this project, please ensure you have at least 1-2 **Validation Rules** created on the **Account** object in your **Salesforce Developer Org**. When you click "LOGIN" and use your own credentials, this app will automatically fetch and display those rules from your org.
+> To test this project, please ensure you have at least 1-2 **Validation Rules** created on the **Account** object in your **Salesforce Developer Org**. When you click "LOGIN TO SALESFORCE" and use your own credentials, this app will automatically fetch and display those rules from your org.
 
 A full-stack web application built to remotely manage Salesforce Account Validation Rules. The application securely authenticates with Salesforce using OAuth 2.0, fetches validation rules via the Tooling API, and allows users to toggle the active state of rules and deploy those changes back to Salesforce.
 

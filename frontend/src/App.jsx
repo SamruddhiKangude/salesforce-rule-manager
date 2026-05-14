@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Shield, RefreshCw, LogOut, AlertCircle, Info, X } from 'lucide-react';
+import { Shield, RefreshCw, LogOut, AlertCircle, Info, X, CheckCircle2 } from 'lucide-react';
 import './index.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
@@ -20,29 +20,7 @@ function App() {
 
   const tabs = ['Validation Rules', 'Workflows', 'Process Flows', 'Triggers'];
 
-  useEffect(() => {
-    // Check URL for tokens (OAuth flow)
-    const params = new URLSearchParams(window.location.search);
-    const accessToken = params.get('accessToken');
-    const instanceUrl = params.get('instanceUrl');
-
-    if (accessToken && instanceUrl) {
-      const creds = { accessToken, instanceUrl };
-      setCredentials(creds);
-      window.history.replaceState({}, document.title, '/');
-      fetchUserInfo(creds.accessToken, creds.instanceUrl);
-    }
-
-    // Check localStorage for saved session
-    const savedCreds = localStorage.getItem('sf_creds');
-    if (savedCreds) {
-      const creds = JSON.parse(savedCreds);
-      setCredentials(creds);
-      fetchUserInfo(creds.accessToken, creds.instanceUrl);
-    }
-  }, []);
-
-  const fetchUserInfo = async (token, url) => {
+  const fetchUserInfo = useCallback(async (token, url) => {
     setLoading(true);
     try {
       const response = await axios.get(`${API_BASE}/user`, {
@@ -53,22 +31,67 @@ function App() {
       });
       setUserInfo(response.data);
       localStorage.setItem('sf_creds', JSON.stringify({ accessToken: token, instanceUrl: url }));
-      // Automatically fetch rules after login success
-      fetchRules({ accessToken: token, instanceUrl: url });
+      
+      // Automatically fetch rules after user info is fetched
+      await fetchRules({ accessToken: token, instanceUrl: url });
     } catch (err) {
       console.error('Failed to fetch user info', err);
       if (err.response?.status === 401) handleLogout();
     } finally {
       setTimeout(() => setLoading(false), 800);
     }
+  }, []);
+
+  const fetchRules = async (explicitCreds = null) => {
+    setFetching(true);
+    setError('');
+    
+    const activeCreds = explicitCreds || credentials;
+    if (!activeCreds) {
+      setFetching(false);
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_BASE}/rules`, { 
+        headers: {
+          'Authorization': `Bearer ${activeCreds.accessToken}`,
+          'x-instance-url': activeCreds.instanceUrl
+        } 
+      });
+      setRules(response.data);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to fetch rules');
+    } finally {
+      setFetching(false);
+    }
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get('accessToken');
+    const instanceUrl = params.get('instanceUrl');
+
+    if (accessToken && instanceUrl) {
+      const creds = { accessToken, instanceUrl };
+      setCredentials(creds);
+      window.history.replaceState({}, document.title, '/');
+      fetchUserInfo(creds.accessToken, creds.instanceUrl);
+    } else {
+      const savedCreds = localStorage.getItem('sf_creds');
+      if (savedCreds) {
+        const creds = JSON.parse(savedCreds);
+        setCredentials(creds);
+        fetchUserInfo(creds.accessToken, creds.instanceUrl);
+      }
+    }
+  }, [fetchUserInfo]);
 
   const handleLogin = () => {
     setLoading(true);
-    // Give time to see the "Accessing Salesforce" screen before redirecting
     setTimeout(() => {
       window.location.href = `${API_BASE}/auth/login?env=${environment}`;
-    }, 1500);
+    }, 1000);
   };
 
   const handleLogout = () => {
@@ -78,33 +101,6 @@ function App() {
     setSuccess('');
     setError('');
     localStorage.removeItem('sf_creds');
-  };
-
-  const getHeaders = (creds = credentials) => ({
-    'Authorization': `Bearer ${creds.accessToken}`,
-    'x-instance-url': creds.instanceUrl
-  });
-
-  const fetchRules = async (explicitCreds = null) => {
-    setFetching(true);
-    
-    const activeCreds = explicitCreds || credentials;
-    if (!activeCreds) {
-      console.error('No credentials available to fetch rules');
-      setFetching(false);
-      return;
-    }
-
-    try {
-      const response = await axios.get(`${API_BASE}/rules`, { headers: getHeaders(activeCreds) });
-      setTimeout(() => {
-        setRules(response.data);
-        setFetching(false);
-      }, 1000);
-    } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to fetch rules');
-      setFetching(false);
-    }
   };
 
   const toggleRule = (ruleId) => {
@@ -122,10 +118,18 @@ function App() {
     setError('');
     setSuccess('');
     try {
-      const response = await axios.post(`${API_BASE}/rules/deploy`, { rules }, { headers: getHeaders() });
+      const response = await axios.post(`${API_BASE}/rules/deploy`, 
+        { rules }, 
+        { 
+          headers: {
+            'Authorization': `Bearer ${credentials.accessToken}`,
+            'x-instance-url': credentials.instanceUrl
+          } 
+        }
+      );
       if (response.data.success) {
-        setSuccess('All changes have been successfully deployed.');
-        fetchRules();
+        setSuccess('Changes deployed successfully to your Salesforce Org.');
+        await fetchRules();
       }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to deploy changes');
@@ -136,212 +140,181 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* Auth Logic Branches */}
+      {/* Auth Screen */}
       {!credentials && !loading ? (
         <div className="app-layout">
-          <div className="content-container">
-            <h1 className="main-title">Salesforce Switch</h1>
+          <div className="content-container animate-fade-in">
+            <h1 className="main-title">Salesforce Rule Manager</h1>
             <p className="description">
-              This tool provides an interface to easily enable and disable components in your Salesforce Org - Workflows, Triggers and Validation Rules. Very useful when doing data migrations and needing to disable certain automation.
-            </p>
-            <p className="description">
-              None of your organisation information or data is captured or kept from running this tool.
+              Securely manage your Salesforce Validation Rules. Log in with any Developer, Sandbox, or Production account to view and toggle rules on the fly.
             </p>
             
-            <div className="login-row">
-              <span className="label">Environment</span>
-              <select 
-                className="select-box" 
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value)}
-              >
-                <option value="Production">Production</option>
-                <option value="Sandbox">Sandbox</option>
-              </select>
-              <button className="btn-login" onClick={handleLogin}>LOGIN</button>
+            <div className="login-card">
+              <div className="login-row">
+                <div className="input-group">
+                  <label className="label">Environment</label>
+                  <select 
+                    className="select-box" 
+                    value={environment}
+                    onChange={(e) => setEnvironment(e.target.value)}
+                  >
+                    <option value="Production">Production / Developer Org</option>
+                    <option value="Sandbox">Sandbox</option>
+                  </select>
+                </div>
+                
+                <button className="btn-login" onClick={handleLogin}>
+                  <Shield size={18} style={{ marginRight: '8px' }} />
+                  LOGIN WITH SALESFORCE
+                </button>
+              </div>
+              <p className="hint-text">You will be redirected to Salesforce secure login page.</p>
             </div>
           </div>
         </div>
       ) : loading ? (
         <div className="app-layout">
-          <div className="content-container">
-            <h1 className="main-title">Salesforce Switch</h1>
-            <p className="description">
-              This tool provides an interface to easily enable and disable components in your Salesforce Org - Workflows, Triggers and Validation Rules. Very useful when doing data migrations and needing to disable certain automation.
-            </p>
-            <p className="description">
-              None of your organisation information or data is captured or kept from running this tool.
-            </p>
-
-            <div className="loading-state">
-              <div className="spinner-gradient"></div>
-              <div className="loading-text">
-                <h2>Accessing Salesforce...</h2>
-                <p>Logging in with OAuth 2.0</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : credentials && rules.length === 0 && !fetching ? (
-        <div className="app-layout">
-          <div className="content-container">
-            <h1 className="main-title">Salesforce Switch</h1>
-            <p className="description">
-              This tool provides an interface to easily enable and disable components in your Salesforce Org - Workflows, Triggers and Validation Rules. Very useful when doing data migrations and needing to disable certain automation.
-            </p>
-            <p className="description">
-              None of your organisation information or data is captured or kept from running this tool.
-            </p>
-
-            <div className="logged-in-box">
-              <h2 className="section-subtitle">Logged in as:</h2>
-              <div className="user-details">
-                <div className="detail-item">
-                  <span className="detail-label">Username:</span>
-                  <span className="detail-value">{userInfo?.username || 'Loading...'}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Organisation:</span>
-                  <span className="detail-value">{userInfo?.orgId || 'Loading...'}</span>
-                </div>
-              </div>
-
-              <div className="button-group-row">
-                <button className="btn-logout-alt" onClick={handleLogout}>LOGOUT</button>
-                <button className="btn-metadata" onClick={fetchRules}>GET METADATA</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : fetching ? (
-        <div className="app-layout">
-          <div className="content-container">
-            <h1 className="main-title">Salesforce Switch</h1>
-            <p className="description">
-              This tool provides an interface to easily enable and disable components in your Salesforce Org - Workflows, Triggers and Validation Rules. Very useful when doing data migrations and needing to disable certain automation.
-            </p>
-            <p className="description">
-              None of your organisation information or data is captured or kept from running this tool.
-            </p>
-
-            <div className="logged-in-header">
-               <h2 className="section-subtitle">Logged in as:</h2>
-            </div>
-
-            <div className="loading-state">
-              <div className="spinner-gradient"></div>
-              <div className="loading-text">
-                <h2>Querying metadata</h2>
-                <p>Building a list of validation rules, workflows and triggers...</p>
-              </div>
+          <div className="loading-state animate-pulse">
+            <div className="spinner-gradient"></div>
+            <div className="loading-text">
+              <h2>Connecting to Salesforce...</h2>
+              <p>Authenticating your session</p>
             </div>
           </div>
         </div>
       ) : (
-        <div className="dashboard-layout">
+        /* Dashboard Screen */
+        <div className="dashboard-layout animate-fade-in">
           <div className="dashboard-content">
-            <h1 className="main-title">Salesforce Switch</h1>
+            <header className="dashboard-header">
+              <h1 className="main-title-small">Salesforce Switch</h1>
+              <div className="user-profile">
+                <div className="user-info-text">
+                  <span className="user-name">{userInfo?.name || 'User'}</span>
+                  <span className="user-org">{userInfo?.username}</span>
+                </div>
+                <button className="btn-icon-logout" title="Logout" onClick={handleLogout}>
+                  <LogOut size={20} />
+                </button>
+              </div>
+            </header>
             
             {showInfo && (
-              <div className="info-alert">
+              <div className="info-alert gradient-border">
                 <div className="info-content">
-                  <p>Use the Off/On switches and the Enable All/Disable All buttons to specify what you want to activate and deactivate for your Org. Once ready, click Deploy to apply the changes to your Org. Deployment times will vary depending on the number of changes you are making. Triggers tend to take longer than Validation Rules and Workflows (especially for Production Orgs, as all Apex Tests must run on deployment).</p>
-                  <p style={{ marginTop: '1rem' }}>You can click on the component names to have a look at what the components are made up of.</p>
+                  <Info size={20} className="info-icon" />
+                  <p>Toggle the switches below and click <strong>Deploy Changes</strong> to update your Salesforce Org. All changes are immediate.</p>
                 </div>
                 <X className="close-info" size={20} onClick={() => setShowInfo(false)} />
               </div>
             )}
-
-            <div className="user-banner">
-              {userInfo?.username} ({userInfo?.orgId})
-            </div>
 
             <div className="tabs-container">
               <div className="tabs-header">
                 {tabs.map(tab => (
                   <div 
                     key={tab} 
-                    className={`tab-item ${activeTab === tab ? 'active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
+                    className={`tab-item ${activeTab === tab ? 'active' : ''} ${tab !== 'Validation Rules' ? 'disabled' : ''}`}
+                    onClick={() => tab === 'Validation Rules' && setActiveTab(tab)}
                   >
                     {tab}
                   </div>
                 ))}
               </div>
 
-              <div className="tab-actions">
-                 <button className="btn-rollback" onClick={fetchRules}>ROLLBACK TO ORIGINAL</button>
-                 <button className="btn-deploy" onClick={deployChanges} disabled={deploying}>
-                   {deploying ? 'DEPLOYING...' : 'DEPLOY CHANGES'}
-                 </button>
-              </div>
-
-              <div className="object-header">
-                <span className="object-name">Account</span>
-                <div className="batch-buttons">
-                  <button className="btn-enable-all" onClick={() => setAllRules(true)}>ENABLE ALL</button>
-                  <button className="btn-disable-all" onClick={() => setAllRules(false)}>DISABLE ALL</button>
+              <div className="tab-actions-row">
+                <div className="object-info">
+                  <span className="object-badge">Account Object</span>
+                  <span className="rules-count">{rules.length} Rules Found</span>
+                </div>
+                <div className="action-buttons">
+                  <button className="btn-refresh" onClick={() => fetchRules()} disabled={fetching}>
+                    <RefreshCw size={16} className={fetching ? 'spin' : ''} />
+                    REFRESH
+                  </button>
+                  <button className="btn-deploy-main" onClick={deployChanges} disabled={deploying || rules.length === 0}>
+                    {deploying ? 'DEPLOYING...' : 'DEPLOY CHANGES'}
+                  </button>
                 </div>
               </div>
 
-              <div className="rules-list">
-                {rules.map(rule => (
-                  <div className="rule-row" key={rule.Id}>
-                    <span className="rule-name">{rule.ValidationName}</span>
-                    <div 
-                      className={`toggle-switch ${rule.Active ? 'on' : 'off'}`}
-                      onClick={() => !deploying && toggleRule(rule.Id)}
-                    >
-                      <span className="toggle-label">{rule.Active ? 'ON' : 'OFF'}</span>
-                      <div className="toggle-handle"></div>
-                    </div>
+              <div className="batch-controls">
+                <button onClick={() => setAllRules(true)}>ENABLE ALL</button>
+                <button onClick={() => setAllRules(false)}>DISABLE ALL</button>
+              </div>
+
+              <div className="rules-scroll-area">
+                {fetching ? (
+                  <div className="fetching-loader">
+                    <div className="spinner-small"></div>
+                    <p>Loading rules from Salesforce...</p>
                   </div>
-                ))}
+                ) : rules.length > 0 ? (
+                  <div className="rules-grid">
+                    {rules.map(rule => (
+                      <div className={`rule-card ${rule.Active ? 'is-active' : 'is-inactive'}`} key={rule.Id}>
+                        <div className="rule-card-header">
+                          <span className="rule-title">{rule.ValidationName}</span>
+                          <div 
+                            className={`modern-toggle ${rule.Active ? 'active' : ''}`}
+                            onClick={() => !deploying && toggleRule(rule.Id)}
+                          >
+                            <div className="toggle-thumb"></div>
+                          </div>
+                        </div>
+                        <p className="rule-desc">{rule.Description || 'No description provided.'}</p>
+                        <div className="rule-footer">
+                          <span className="status-label">{rule.Active ? 'ACTIVE' : 'INACTIVE'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <AlertCircle size={48} />
+                    <h3>No Rules Found</h3>
+                    <p>We couldn't find any validation rules for the Account object in this Org.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Global Modals & Overlays */}
+      {/* Deployment Modal */}
       {deploying && (
         <div className="modal-overlay">
-          <div className="modal-box">
-            <h2 className="modal-title">Processing</h2>
-            <p className="modal-text">Deploying changes. Time will vary depending on number and type of components.</p>
-            <div className="progress-bar-bg">
-              <div className="progress-bar-fill"></div>
+          <div className="modal-box glassmorphism">
+            <div className="loader-container">
+              <div className="spinner-gradient-large"></div>
             </div>
+            <h2>Deploying to Salesforce</h2>
+            <p>Please wait while we update your validation rules. This may take a moment...</p>
           </div>
         </div>
       )}
 
+      {/* Success Modal */}
       {success && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ padding: 0, width: '500px' }}>
-            <div className="modal-header-line">
-              <h2 className="modal-title" style={{ margin: 0 }}>Complete</h2>
-              <X className="modal-close-icon" size={20} onClick={() => setSuccess('')} />
-            </div>
-            <div className="modal-body-padding">
-              <div className="success-message">{success}</div>
-            </div>
-            <div className="modal-footer-line">
-              <button className="btn-close-modal-alt" onClick={() => setSuccess('')}>CLOSE</button>
-            </div>
+        <div className="modal-overlay" onClick={() => setSuccess('')}>
+          <div className="modal-box success animate-bounce-in" onClick={e => e.stopPropagation()}>
+            <CheckCircle2 size={64} className="success-icon" />
+            <h2>Deployment Complete</h2>
+            <p>{success}</p>
+            <button className="btn-modal-close" onClick={() => setSuccess('')}>CONTINUE</button>
           </div>
         </div>
       )}
 
+      {/* Error Modal */}
       {error && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <h2 className="modal-title">Error</h2>
-            <X className="modal-close" size={24} onClick={() => setError('')} />
-            <div className="success-message" style={{ backgroundColor: '#f2dede', color: '#a94442', borderColor: '#ebccd1' }}>
-              {error}
-            </div>
-            <button className="btn-close-modal" onClick={() => setError('')}>CLOSE</button>
+        <div className="modal-overlay" onClick={() => setError('')}>
+          <div className="modal-box error animate-shake" onClick={e => e.stopPropagation()}>
+            <AlertCircle size={64} className="error-icon" />
+            <h2>Error Occurred</h2>
+            <p>{error}</p>
+            <button className="btn-modal-close" onClick={() => setError('')}>TRY AGAIN</button>
           </div>
         </div>
       )}
@@ -350,3 +323,4 @@ function App() {
 }
 
 export default App;
+
