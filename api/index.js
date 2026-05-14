@@ -9,7 +9,7 @@ const app = express();
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:5173',
-  'https://salesforce-rule-manager-assessment.vercel.app' // Example production URL
+  'https://salesforce-rule-manager.vercel.app'
 ].filter(Boolean);
 
 app.use(cors({
@@ -25,28 +25,40 @@ app.use(cors({
 
 app.use(express.json());
 
-const oauth2 = new jsforce.OAuth2({
-  clientId: process.env.SALESFORCE_CLIENT_ID,
-  clientSecret: process.env.SALESFORCE_CLIENT_SECRET,
-  redirectUri: process.env.SALESFORCE_CALLBACK_URL || 'http://localhost:5000/api/auth/callback'
-});
+// Helper to create OAuth2 object dynamically based on environment
+const getOAuth2 = (env = 'Production') => {
+  const loginUrl = env === 'Sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+  return new jsforce.OAuth2({
+    clientId: process.env.SALESFORCE_CLIENT_ID,
+    clientSecret: process.env.SALESFORCE_CLIENT_SECRET,
+    redirectUri: process.env.SALESFORCE_CALLBACK_URL || 'http://localhost:5000/api/auth/callback',
+    loginUrl: loginUrl
+  });
+};
 
 app.get('/api/auth/login', (req, res) => {
+  const env = req.query.env || 'Production';
+  const oauth2 = getOAuth2(env);
+  
   res.redirect(oauth2.getAuthorizationUrl({ 
-    prompt: 'login' 
+    prompt: 'login',
+    state: env 
   }));
 });
 
 app.get('/api/auth/callback', async (req, res) => {
-  const conn = new jsforce.Connection({ oauth2: oauth2 });
   const code = req.query.code;
+  const env = req.query.state || 'Production';
+  const oauth2 = getOAuth2(env);
+  const conn = new jsforce.Connection({ oauth2: oauth2 });
+
   try {
     await conn.authorize(code);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}?accessToken=${conn.accessToken}&instanceUrl=${encodeURIComponent(conn.instanceUrl)}`);
   } catch (err) {
     console.error("OAuth Error:", err.message);
-    res.status(500).send(`Authentication failed! Please go back to the app and try logging in again. (Error: ${err.message})`);
+    res.status(500).send(`Authentication failed! (Error: ${err.message})`);
   }
 });
 
@@ -107,7 +119,6 @@ app.post('/api/rules/deploy', jsforceAuth, async (req, res) => {
   }
 });
 
-// For local development
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
