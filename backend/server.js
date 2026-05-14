@@ -13,8 +13,31 @@ const oauth2 = new jsforce.OAuth2({
   redirectUri: process.env.SALESFORCE_CALLBACK_URL || 'http://localhost:5000/api/auth/callback'
 });
 
+// Standard OAuth Login
 app.get('/api/auth/login', (req, res) => {
-  res.redirect(oauth2.getAuthorizationUrl({}));
+  const loginUrl = req.query.env === 'Sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+  res.redirect(oauth2.getAuthorizationUrl({ loginUrl }));
+});
+
+// Direct Login using .env credentials (Automatic Login)
+app.post('/api/auth/direct-login', async (req, res) => {
+  const { username, password, securityToken, environment } = req.body;
+  const loginUrl = environment === 'Sandbox' ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+  
+  const conn = new jsforce.Connection({ loginUrl });
+  
+  try {
+    const userInfo = await conn.login(username, password + (securityToken || ''));
+    res.json({
+      accessToken: conn.accessToken,
+      instanceUrl: conn.instanceUrl,
+      userId: userInfo.id,
+      orgId: userInfo.organizationId
+    });
+  } catch (err) {
+    console.error("Direct Login Error:", err.message);
+    res.status(401).json({ error: `Authentication failed: ${err.message}` });
+  }
 });
 
 app.get('/api/auth/callback', async (req, res) => {
@@ -73,10 +96,7 @@ app.post('/api/rules/deploy', jsforceAuth, async (req, res) => {
 
   try {
     const promises = rules.map(async (rule) => {
-      // Tooling API requires the full Metadata object to update a rule
       const fullRule = await req.conn.tooling.sobject('ValidationRule').retrieve(rule.Id);
-      
-      // Update the active status inside the Metadata object
       fullRule.Metadata.active = rule.Active;
       
       return req.conn.tooling.sobject('ValidationRule').update({
@@ -85,19 +105,16 @@ app.post('/api/rules/deploy', jsforceAuth, async (req, res) => {
       });
     });
 
-    const results = await Promise.all(promises);
-    res.json({ success: true, results });
+    await Promise.all(promises);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 const path = require('path');
-
-// Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../frontend/dist', 'index.html'));
   });

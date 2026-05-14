@@ -32,7 +32,9 @@ const oauth2 = new jsforce.OAuth2({
 });
 
 app.get('/api/auth/login', (req, res) => {
-  res.redirect(oauth2.getAuthorizationUrl({}));
+  res.redirect(oauth2.getAuthorizationUrl({ 
+    prompt: 'login' 
+  }));
 });
 
 app.get('/api/auth/callback', async (req, res) => {
